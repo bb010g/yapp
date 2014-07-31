@@ -1,0 +1,24 @@
+name:                yapp
+version:             0.1.0.0
+synopsis:            Yet Another Polymorphic Prelude
+description:         A Prelude that's as general as possible.
+homepage:            https://github.com/bb010g/yapp
+license:             GPL-3
+license-file:        LICENSE
+author:              Brayden Banks
+maintainer:          bb010g@gmail.com
+-- copyright:           
+category:            Control, Prelude
+build-type:          Simple
+-- extra-source-files:  
+cabal-version:       >=1.10
+
+source-repository head
+  type: git
+  location: git://github.com/bb010g/yapp.git
+
+library
+  exposed-modules:     YAPP
+  build-depends:       base >=4.7 && <4.8
+               ,       semigroupoids >=4.0 && < 4.1
+  hs-source-dirs:      src
