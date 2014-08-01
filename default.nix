@@ -9,7 +9,7 @@ haskellPackages.cabal.mkDerivation (self: {
   version = "0.1.0.0";
   src = /home/brayden/Dropbox/Code/yapp;
   isLibrary = true;
-  buildDepends = with haskellPackages; [ semigroupoids ];
+  buildDepends = with haskellPackages; [ semigroups semigroupoids ];
   meta = {
     homepage = "https://github.com/bb010g/yapp";
     description = "Yet Another Polymorphic Prelude";

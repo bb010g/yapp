@@ -131,8 +131,8 @@ module YAPP (
     Monad (fail), MonadPlus, returning, apDefault, guard, ap,
     mapM, mapM_, sequence, sequence_,
 
-    Semigroupoid (), WrappedCategory (WrapCategory, unwrapCategory),
-    Semi (Semi, getSemi),
+    Semigroupoid (), Category (), SCategory, -- Category (id),
+    WrappedCategory (WrapCategory, unwrapCategory), Semi (Semi, getSemi),
     
     Semigroup ((<>), sconcat, times1p), timesN,
     WrappedMonoid (WrapMonoid, unwrapMonoid),
@@ -256,6 +256,8 @@ ifThenElse p t f = case p of
 
 ifte :: Bool -> a -> a -> a
 ifte = ifThenElse
+
+type SCategory c = (Semigroupoid c, Category c)
 
 infixr 9 .
 (.) :: Semigroupoid c => c j k -> c i j -> c i k

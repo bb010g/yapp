@@ -20,5 +20,6 @@ source-repository head
 library
   exposed-modules:     YAPP
   build-depends:       base >=4.7 && <4.8
+               ,       semigroups >=0.15 && < 0.16
                ,       semigroupoids >=4.0 && < 4.1
   hs-source-dirs:      src
