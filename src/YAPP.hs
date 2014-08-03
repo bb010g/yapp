@@ -109,6 +109,7 @@ module YAPP (
     -- ** Functions on strings
     lines, words, unlines, unwords,
 
+    Foldable (), toList, toApplicMonoid, Traversable (), -- addded
     fold, foldMap, foldl', foldr', traverse, sequenceA, traverse_, sequenceA_, -- added
     headS, lastS, tailS, initS, length', iterate', iterateN, iterateN', -- added
     cycle', cycleN, cycleN', -- added
@@ -125,19 +126,20 @@ module YAPP (
     Apply (), (<*>), (<**>), (<*), (*>),
     Alt (some, many), (<|>),
     Plus (), mplus, mzero,
-    Applicative (), WrappedApplicative (WrapApplicative, unwrapApplicative),
-    Alternative (), WrappedMonad (WrapMonad, unwrapMonad),
+    Applicative (),
+    WrappedApplicative (WrapApplicative, unwrapApplicative), (~<*>~),
+    Alternative (), WrappedMonad (WrapMonad, unwrapMonad), (~>>=~),
     Bind (join), (>>=), (=<<), (>>), (<<), (>=>), (<=<),
-    Monad (fail), MonadPlus, returning, apDefault, guard, ap,
-    mapM, mapM_, sequence, sequence_,
+    Monad (fail), return, MonadPlus, returning, apDefault, guard, ap,
+    mapM, mapM_, sequence, sequence_, ABMonad, APAlternative, ABPMonadPlus,
 
-    Semigroupoid (), Category (), SCategory, -- Category (id),
+    Semigroupoid (), Category (), (~.~), SCategory, -- Category (id),
     WrappedCategory (WrapCategory, unwrapCategory), Semi (Semi, getSemi),
     
-    Semigroup ((<>), sconcat, times1p), timesN,
-    WrappedMonoid (WrapMonoid, unwrapMonoid),
+    Semigroup ((<>), sconcat, times1p), timesN, -- (++)
+    WrappedMonoid (WrapMonoid, unwrapMonoid), (~++~), SMonoid,
+    ApplicSemigroup, ApplicMonoid, ApplicSMonoid,
     Monoid (mempty), Option (Option, getOption), option,
-    SMonoid,
 ) where
 
 import GHC.Base
@@ -187,6 +189,7 @@ import Text.Read
     ( ReadS, Read (readsPrec, readList)
     , reads, readParen, read, lex
     )
+import qualified Text.ParserCombinators.ReadPrec (ReadPrec)
 
 import Data.Either (Either (Left, Right), either)
 import Data.Maybe (Maybe (Nothing, Just), maybe)
@@ -204,15 +207,16 @@ import Prelude (($!))
 import Data.Foldable
     ( Foldable, Foldable (fold, foldMap, foldr, foldr', foldl, foldl'
     , foldr1, foldl1), mapM_, sequence_, and, or, any, all, sum, product
-    , concat, concatMap, maximum, minimum, elem, notElem
+    , toList, concat, concatMap, maximum, minimum, elem, notElem
     , traverse_, sequenceA_
     )
 import Data.Traversable
-    ( traverse, sequenceA
+    ( Traversable, Traversable ()
+    , traverse, sequenceA
     , mapM,     sequence
     )
 import Data.List
-    ( filter, tail, init, (!!), reverse
+    ( filter, (!!), reverse
     , scanl, scanl1, scanr, scanr1
     , take, drop, splitAt, takeWhile, dropWhile, span
     , break, lookup, zip, zip3, zipWith, zipWith3, unzip, unzip3, lines, words
@@ -258,10 +262,12 @@ ifte :: Bool -> a -> a -> a
 ifte = ifThenElse
 
 type SCategory c = (Semigroupoid c, Category c)
-
 infixr 9 .
 (.) :: Semigroupoid c => c j k -> c i j -> c i k
 (.) = Data.Semigroupoid.o
+infixr 9 ~.~
+(~.~) :: Category c => c j k -> c i j -> c i k
+(WrapCategory -> x) ~.~ (WrapCategory -> y) = unwrapCategory $ x . y
 
 infixr 1 >>>, <<<
 (<<<) :: Semigroupoid c => c j k -> c i j -> c i k
@@ -269,20 +275,32 @@ infixr 1 >>>, <<<
 (>>>) :: Semigroupoid c => c i j -> c j k -> c i k
 (>>>) = flip (.)
 
-type SMonoid a = (Semigroup a, Monoid a)
-
+type SMonoid m = (Semigroup m, Monoid m)
 infixr 5 ++
 (++) :: Semigroup s => s -> s -> s
 (++) = (<>)
+infixr 5 ~++~
+(~++~) :: Monoid m => m -> m -> m
+(WrapMonoid -> x) ~++~ (WrapMonoid -> y) = unwrapMonoid $ x ++ y
 
+type ApplicSemigroup t a = (Applicative t, Semigroup (t a))
+type ApplicMonoid t a = (Applicative t, Monoid (t a))
+type ApplicSMonoid t a = (Applicative t, SMonoid (t a))
+
+type ABMonad m = (Applicative m, Bind m)
+type APAlternative f = (Applicative f, Plus f)
+type ABPMonadPlus m = (Applicative m, Bind m, Plus m)
 map :: Functor f => (a -> b) -> f a -> f b
 map = Data.Functor.fmap
 infixl 4 <$$>
 (<$$>) :: Functor f => f a -> (a -> b) -> f b
 (<$$>) = flip (<$>)
-infixl 4 <*>, <*, *>, <**>
+infixl 4 <*>, ~<*>~, <*, *>, <**>
 (<*>) :: Apply f => f (a -> b) -> f a -> f b
 (<*>) = (Data.Functor.Apply.<.>)
+(~<*>~) :: Applicative f => f (a -> b) -> f a -> f b
+(WrapApplicative -> f) ~<*>~ (WrapApplicative -> x) =
+    unwrapApplicative $ f <*> x
 (<*) :: Apply f => f a -> f b -> f a
 (<*) = (Data.Functor.Apply.<.)
 (*>) :: Apply f => f a -> f b -> f b
@@ -296,9 +314,11 @@ mplus :: Alt f => f a -> f a -> f a
 mplus = (<|>)
 mzero :: Plus f => f a
 mzero = Data.Functor.Plus.zero
-infixl 1 >>, >>=, <<, =<<
+infixl 1 >>, >>=, ~>>=~, <<, =<<
 (>>=) :: Bind f => f a -> (a -> f b) -> f b
 (>>=) = (Data.Functor.Bind.>>-)
+(~>>=~) :: Monad m => m a -> (a -> m b) -> m b
+(WrapMonad -> x) ~>>=~ ((WrapMonad .) -> f) = unwrapMonad $ x >>= f
 (=<<) :: Bind f => (a -> f b) -> f a -> f b
 (=<<) = (Data.Functor.Bind.-<<)
 (<<) :: Apply f => f a -> f b -> f a
@@ -317,6 +337,9 @@ guard p = if p then return () else mzero
 ap :: Apply f => f (a -> b) -> f a -> f b
 ap = (<*>)
 
+toApplicMonoid :: (ApplicSMonoid m i, Foldable t) => t i -> m i
+toApplicMonoid = foldr ((++) . return) mempty
+
 head :: Foldable t => t a -> a
 head = foldr const (errorEmptyFoldable "head")
 headS :: Foldable t => t a -> Maybe a
@@ -325,14 +348,18 @@ last :: Foldable t => t a -> a
 last = foldl' (flip const) (errorEmptyFoldable "last")
 lastS :: Foldable t => t a -> Maybe a
 lastS = foldl' (const Just) Nothing
-tailS :: [a] -> Maybe [a]
-tailS [] = Nothing
-tailS xs = Just $ tail xs
-{-# INLINE tailS #-}
-initS :: [a] -> Maybe [a]
-initS [] = Nothing
-initS xs = Just $ init xs
-{-# INLINE initS #-}
+tail :: (ApplicSMonoid f a, Foldable t) => t a -> f a
+tail = snd . foldr (\x (p, _) -> (return x ++ p, p))
+                   (mempty, errorEmptyFoldable "tail")
+tailS :: (ApplicSMonoid f a, Foldable t) => t a -> Maybe (f a)
+tailS = snd . foldr (\x (p, _) -> (Just (return x) ++ p, p))
+                    (Just mempty, Nothing)
+init :: (ApplicSMonoid f a, Foldable t) => t a -> f a
+init = snd . foldl' (\(p, _) x -> (p ++ return x, p))
+                    (mempty, errorEmptyFoldable "init")
+initS :: (ApplicSMonoid f a, Foldable t) => t a -> Maybe (f a)
+initS = snd . foldl' (\(p, _) x -> (p ++ Just (return x), p))
+                     (Just mempty, Nothing)
 null :: Foldable t => t a -> Bool
 null (headS -> Nothing) = True
 null _ = False
@@ -341,22 +368,22 @@ length = foldr (const (+1)) 0
 length' :: (Num n, Foldable t) => t a -> n
 length' = foldr (const (+1)) 0
 
-iterate :: (Semigroup (t (a -> a)), Applicative t) => (a -> a) -> a -> t a
+iterate :: ApplicSemigroup t (a -> a) => (a -> a) -> a -> t a
 iterate f x = ($ x) <$> iterate' f id
-iterate' :: (Semigroupoid c, Semigroup (t (c a b)), Applicative t) =>
+iterate' :: (Semigroupoid c, ApplicSemigroup t (c a b)) =>
             c b b -> c a b -> t (c a b)
 iterate' f x = return x ++ iterate' f (f . x)
-iterateN :: (SMonoid (t (a -> a)), Applicative t) =>
+iterateN :: ApplicSMonoid t (a -> a) =>
             (a -> a) -> Integer -> a -> t a
 iterateN f n x = ($ x) <$> iterateN' f n id
-iterateN' :: (Semigroupoid c, SMonoid (t (c a b)), Applicative t) =>
+iterateN' :: (Semigroupoid c, ApplicSMonoid t (c a b)) =>
              c b b -> Integer -> c a b -> t (c a b)
 iterateN' _ 0 _ = mempty
 iterateN' f n x = return x ++ iterateN' f (n - 1) (f . x)
 
-repeat :: (Semigroup (t a), Applicative t) => a -> t a
+repeat :: ApplicSemigroup t a => a -> t a
 repeat x = return x ++ repeat x
-replicate :: (SMonoid (t a), Applicative t) =>
+replicate :: ApplicSMonoid t a =>
              Integer -> a -> t a
 replicate 0 _ = mempty
 replicate n x = return x ++ replicate (n - 1) x
@@ -384,6 +411,12 @@ unlines = concatMap (++"\n")
 unwords :: Foldable t => t String -> String
 unwords (null -> True) = ""
 unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
+
+instance Apply Text.ParserCombinators.ReadPrec.ReadPrec where
+    (<.>) = (<*>)
+
+instance Bind Text.ParserCombinators.ReadPrec.ReadPrec where
+    (>>-) = (>>=)
 
 -- From the normal Prelude
 
